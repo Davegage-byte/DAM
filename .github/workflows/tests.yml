@@ -1,0 +1,39 @@
+name: DAM Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - release-request.json
+      - README.md
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Python-Syntax und Regressionstests
+        run: |
+          python3 -m compileall -q .
+          python3 -m unittest discover -p 'test_*.py' -q
+      - name: Release-Dateien prüfen
+        run: |
+          python3 build_release.py --output dist
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          from tempfile import TemporaryDirectory
+          import dam_updater
+
+          version = json.loads(Path('version.json').read_text())['version']
+          payload = (Path('dist') / f'DAM-v{version}.zip').read_bytes()
+          with TemporaryDirectory() as directory:
+              dam_updater._safe_archive(payload, version, Path(directory))
+          print('Release-Dateien erfolgreich validiert')
+          PY
