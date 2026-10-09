@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DAM 0.6.1 – mit sicherem Selbstupdate über GitHub-Releases."""
+"""DAM 0.6.2 – Update-Katalog auch für benutzerlokale DAM-App."""
 import gzip
 import json
 import math
@@ -28,7 +28,7 @@ import app_shortcuts
 import apt_install
 import apt_remove
 
-VERSION = '0.6.1'
+VERSION = '0.6.2'
 # Nur technische Fehler und Paketaktionen protokollieren, niemals Passwörter.
 _LOG_DIR = os.path.expanduser('~/.local/state/dam')
 try:
@@ -573,6 +573,16 @@ class DAM(Adw.Application):
                                   desktop_id=app_match.get('desktop_id', '') if app_match else '',
                                   desktop_file=app_match.get('desktop_file') if app_match else None,
                                   apt_candidate=(candidates.get(package) if candidates is not None else apt_install.candidate(package)) if package in apt_install.ALLOWED else None))
+
+        # DAM hat keinen APT/Snap/Flatpak-Paketeintrag. Manche Desktop-Umgebungen
+        # lassen den benutzerlokalen Starter in Gio.AppInfo.get_all() aus. DAM
+        # dennoch als Update-Kachel registrieren, wenn es installiert ist.
+        # Sonst wird ein korrekt erkanntes GitHub-Release stillschweigend verworfen.
+        dam_item = next((item for item in available if item['package'] == 'dam'
+                         and item.get('is_installed')), None)
+        if dam_item and not any(item['name'].casefold() == 'dam' for item in installed):
+            installed.append({**dam_item, 'is_removable': False})
+            installed.sort(key=lambda item: item['name'].casefold())
 
         return installed, available
 
@@ -2123,8 +2133,10 @@ class DAM(Adw.Application):
                                              else 'Keine Updates ermittelt – Prüfung teilweise fehlgeschlagen.')
             self.update_status.set_text('')
         if errors:
-            self.update_check_info.set_tooltip_text('\n'.join(errors))
-            self.update_status.set_text('Einige Prüfungen fehlgeschlagen – Details bei der Updateanzeige.')
+            details = '; '.join(errors)
+            self.update_check_info.set_tooltip_text(details)
+            # Fehlerquelle im sichtbaren Status zeigen – nicht nur im Hover-Tooltip.
+            self.update_status.set_text('Prüfung teilweise fehlgeschlagen: ' + details[:280])
         else:
             self.update_check_info.set_tooltip_text(None)
         return False
