@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DAM 0.5.24 – Lade- und Ergebnismeldungen mittig im App-Bereich."""
+"""DAM 0.6.0 – mit sicherem Selbstupdate über GitHub-Releases."""
 import gzip
 import json
 import math
@@ -22,12 +22,13 @@ gi.require_version('Adw', '1')
 from gi.repository import Adw, Gdk, Gio, Gtk, GLib, Pango
 
 import rustdesk_update
+import dam_updater
 import package_updates
 import app_shortcuts
 import apt_install
 import apt_remove
 
-VERSION = '0.5.25'
+VERSION = '0.6.0'
 # Nur technische Fehler und Paketaktionen protokollieren, niemals Passwörter.
 _LOG_DIR = os.path.expanduser('~/.local/state/dam')
 try:
@@ -345,6 +346,7 @@ class DAM(Adw.Application):
         self.add_action(cancel_action)
         self.set_accels_for_action('app.cancel_scan', ['Escape'])
         self.rustdesk_release = None
+        self.dam_release = None
         self.rustdesk_update_available = False
         self.update_check_running = False
         self.update_install_running = False
@@ -686,10 +688,25 @@ class DAM(Adw.Application):
         self.window.set_content(main)
         self.add_style()
         self.window.present()
+        # Erst nach erfolgreichem Fensteraufbau dem externen Updater bestätigen.
+        GLib.timeout_add(900, self._signal_update_ready)
         # Erst das Fenster zeichnen lassen, dann im Hintergrund Paketdaten laden.
         # Währenddessen schützt die Sperre vor Aktionen auf unvollständigen Listen.
         self.update_ui_lock()
         GLib.timeout_add(80, self._begin_startup_scan)
+
+    def _signal_update_ready(self):
+        """Handshake mit unabhängiger Watchdog-Instanz nach dem Fensterstart."""
+        target = os.environ.pop('DAM_UPDATE_READY_FILE', '')
+        if target:
+            expected = os.path.expanduser('~/.local/state/dam/ready-')
+            if target.startswith(expected) and '/' not in target[len(expected):]:
+                try:
+                    with open(target, 'x', encoding='utf-8') as stream:
+                        stream.write(VERSION + '\n')
+                except OSError:
+                    _log.exception('DAM-Updater konnte Startbestätigung nicht schreiben')
+        return False
 
     def _begin_startup_scan(self):
         self.refresh_app_lists(0, operation='startup')
@@ -785,6 +802,16 @@ class DAM(Adw.Application):
                 'App-Kacheln anklicken, um sie auszuwählen; „Alle auswählen“ markiert alle '
                 'sichtbaren, unterstützten Apps. Rechtsklick auf eine App öffnet die Optionen '
                 'für Desktop-Verknüpfung und Autostart. Strg+Q beendet DAM.')
+        section('DAM aktualisieren',
+                'Beim Öffnen von „Aktualisieren“ prüft DAM auch sein offizielles GitHub-Release. '
+                'Neue Versionen werden heruntergeladen, geprüft und erst nach einem Neustart aktiviert. '
+                'Falls DAM nicht startet, stellt der Updater die vorherige Version wieder her.')
+        rollback_file = os.path.expanduser('~/.local/state/dam/previous-version.txt')
+        if os.path.isfile(rollback_file):
+            rollback_button = Gtk.Button(label='Vorherige DAM-Version wiederherstellen')
+            rollback_button.set_halign(Gtk.Align.START)
+            rollback_button.connect('clicked', self.confirm_dam_rollback)
+            box.append(rollback_button)
         section('Administratorrechte',
                 'Ubuntu fragt bei Paketänderungen nach Administratorrechten. DAM speichert '
                 'keine Passwörter. Die gezeigten Versions- und Datumsinformationen können '
@@ -1935,6 +1962,43 @@ class DAM(Adw.Application):
                             + ' – Protokoll: ~/.local/state/dam/dam.log')
         return False
 
+    def confirm_dam_rollback(self, *_):
+        """Bewusste manuelle Rückkehr zur letzten funktionierenden Version."""
+        if any((self.update_check_running, self.update_install_running,
+                self.install_running, self.remove_running, self.list_refresh_running)):
+            return
+        dlg = Adw.MessageDialog.new(
+            self.window, 'Vorherige DAM-Version wiederherstellen?',
+            'DAM wird beendet und danach mit der letzten Version neu gestartet. '
+            'Deine persönlichen Einstellungen bleiben erhalten.')
+        dlg.add_response('cancel', 'Abbrechen')
+        dlg.add_response('rollback', 'Wiederherstellen')
+        dlg.set_response_appearance('rollback', Adw.ResponseAppearance.DESTRUCTIVE)
+        dlg.set_default_response('cancel')
+        dlg.set_close_response('cancel')
+        dlg.connect('response', lambda _dlg, response:
+                    self._run_dam_updater('rollback') if response == 'rollback' else None)
+        dlg.present()
+
+    def _run_dam_updater(self, mode, version=None):
+        """Watchdog bleibt unabhängig vom beendeten GTK-Prozess aktiv."""
+        try:
+            executable = os.path.realpath(dam_updater.__file__)
+            args = ['/usr/bin/python3', executable, mode, str(os.getpid())]
+            if version is not None:
+                args.append(version)
+            subprocess.Popen(args, start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, close_fds=True)
+        except (OSError, ValueError) as exc:
+            self.update_status.set_text('DAM-Neustart fehlgeschlagen: ' + str(exc)[:140])
+            return
+        GLib.timeout_add(250, self._close_for_update)
+
+    def _close_for_update(self):
+        self.quit()
+        return False
+
     def check_updates(self):
         """APT aus lokalem Cache, Snap/Flatpak und RustDesk aus GitHub prüfen."""
         if (self._initial_loading or self.list_refresh_running or
@@ -1951,7 +2015,7 @@ class DAM(Adw.Application):
         self.update_check_button.set_sensitive(False)
         self.update_select_button.set_sensitive(False)
         self.update_all_button.set_sensitive(False)
-        self.update_check_info.set_text('Suche nach Updates … (APT, Snap, Flatpak, GitHub)')
+        self.update_check_info.set_text('Suche nach Updates … (APT, Snap, Flatpak, GitHub/DAM)')
         # Die einheitliche zentrale Ladeflaeche zeigt die Meldung bereits.
         # Keine zweite, versetzt liegende Beschriftung darunter einblenden.
         self.update_empty_label.set_visible(False)
@@ -1985,14 +2049,24 @@ class DAM(Adw.Application):
                     checked += 1
             except Exception as exc:
                 errors.append(f'GitHub/RustDesk: {str(exc)[:100]}')
+            dam_release = None
+            if not cancel_event.is_set():
+                try:
+                    dam_release = dam_updater.check_latest(VERSION)
+                    if dam_release:
+                        records.append(package_updates.UpdateRecord(
+                            'dam', 'dam', VERSION, dam_release.version))
+                    checked += 1
+                except Exception as exc:
+                    errors.append('DAM/GitHub: ' + str(exc)[:100])
             if not cancel_event.is_set():
                 GLib.idle_add(self.finish_update_check, records, errors, checked,
-                              release, generation)
+                              release, generation, dam_release)
 
         threading.Thread(target=worker, daemon=True).start()
         return False
 
-    def finish_update_check(self, records, errors, checked, release, generation=None):
+    def finish_update_check(self, records, errors, checked, release, generation=None, dam_release=None):
         """Nur aktuelle Scan-Ergebnisse anzeigen, nie abgebrochene Ergebnisse."""
         if generation is not None and generation != self._update_scan_generation:
             return False
@@ -2002,7 +2076,11 @@ class DAM(Adw.Application):
         self.update_ui_lock()
         self.update_check_button.set_sensitive(True)
         self.rustdesk_release = release
+        self.dam_release = dam_release
         mapped = package_updates.updates_for_apps(records, list(self.update_rows.values()))
+        if dam_release:
+            mapped['dam'] = package_updates.UpdateRecord(
+                'dam', 'dam', VERSION, dam_release.version)
         # RustDesk auch dann zuordnen, wenn Desktop-Starter keinen Paketnamen hat.
         github = next((r for r in records if r.source == 'github' and r.identifier == 'rustdesk'), None)
         if github:
@@ -2060,6 +2138,9 @@ class DAM(Adw.Application):
         extra = ('\n\nAchtung: Eine RustDesk-Fernverbindung kann abbrechen. '
                  'Bitte direkt vor Ort aktualisieren.'
                  if any(rec.identifier == 'rustdesk' for _, rec in selected) else '')
+        if any(rec.source == 'dam' for _, rec in selected):
+            extra += ('\n\nDAM wird nach dem erfolgreichen Update automatisch '
+                      'geschlossen und neu gestartet. Die Vorversion bleibt erhalten.')
         dlg = Adw.MessageDialog.new(
             self.window, f'{len(selected)} App(s) aktualisieren?',
             f'{names}\n\nDAM installiert nur die angezeigten Updates. '
@@ -2088,10 +2169,18 @@ class DAM(Adw.Application):
         def worker():
             completed = []
             errors = []
-            for index, (name, record) in enumerate(selected, 1):
+            staged_dam = None
+            # DAM muss als letztes aktualisiert werden, da ein Neustart folgt.
+            selected_ordered = sorted(selected, key=lambda item: item[1].source == 'dam')
+            for index, (name, record) in enumerate(selected_ordered, 1):
                 report(f'{index}/{len(selected)}: {name} wird aktualisiert …')
                 try:
-                    if record.source == 'github':
+                    if record.source == 'dam':
+                        if not self.dam_release or record.available != self.dam_release.version:
+                            raise RuntimeError('DAM-Release ist nicht mehr gültig')
+                        dam_updater.stage(self.dam_release)
+                        staged_dam = self.dam_release.version
+                    elif record.source == 'github':
                         if not self.rustdesk_release or record.identifier != 'rustdesk':
                             raise RuntimeError('Keine gültigen RustDesk-Release-Daten vorhanden')
                         rustdesk_update.install(self.rustdesk_release, report)
@@ -2102,11 +2191,11 @@ class DAM(Adw.Application):
                     errors.append(f'{name}: {str(exc)[:250]}')
                     # Keine endlose Kette fehlerhafter Anmeldedialoge.
                     break
-            GLib.idle_add(self.finish_updates, status, completed, errors)
+            GLib.idle_add(self.finish_updates, status, completed, errors, staged_dam)
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def finish_updates(self, status, completed, errors):
+    def finish_updates(self, status, completed, errors, staged_dam=None):
         self.update_install_running = False
         self.update_ui_lock()
         self.update_check_button.set_sensitive(True)
@@ -2114,6 +2203,10 @@ class DAM(Adw.Application):
             status.set_text(f'{len(completed)} aktualisiert. Fehler: {errors[0]}')
         else:
             status.set_text(f'{len(completed)} App(s) erfolgreich aktualisiert!')
+        if staged_dam and not errors:
+            status.set_text('DAM wurde geprüft und wird neu gestartet …')
+            self._run_dam_updater('activate', staged_dam)
+            return False
         # Neu scannen, damit erfolgreich aktualisierte Kacheln verschwinden.
         # Status bleibt zunächst sichtbar, während die Prüfung läuft.
         GLib.timeout_add(1400, self.check_updates)
