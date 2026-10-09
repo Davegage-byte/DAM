@@ -31,7 +31,10 @@ class VersionBackupTests(unittest.TestCase):
         folder.mkdir()
         (folder / 'dam.py').write_text("VERSION = %r\n" % version, 'utf-8')
         if not is_old:
-            (folder / 'dam_updater.py').write_text('def update():\n    pass\n', 'utf-8')
+            for name in updater.APP_FILES:
+                if name.endswith('.py') and name != 'dam.py':
+                    (folder / name).write_text('def update():\n    pass\n', 'utf-8')
+            (folder / 'dam.png').write_bytes(b'\x89PNG\r\n\x1a\n' + b'pngdata')
         (folder / 'version.json').write_text(
             json.dumps({'schema': 1, 'version': version}), 'utf-8')
         return folder
