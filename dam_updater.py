@@ -356,5 +356,8 @@ if __name__ == '__main__':
     try:
         main(sys.argv)
     except Exception as exc:
-        _record_failure(str(exc), 'unbekannt')
+        # Eine bereits protokollierte fehlgeschlagene Version nicht durch
+        # den generischen CLI-Fehler mit 'unbekannt' überschreiben.
+        if not (state_dir() / 'updater-error.json').exists():
+            _record_failure(str(exc), 'unbekannt')
         sys.exit(1)
