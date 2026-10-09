@@ -2,7 +2,7 @@
 
 **DAM** ist ein grafischer App-Manager für Ubuntu (GTK 4 / Libadwaita).
 
-## Stand: v0.6.3 – GUI-Selbstupdate-Praxistest
+## Stand: v0.6.4 – Manuelle DAM-Backups und Bereinigung
 
 - Apps installieren, aktualisieren und deinstallieren (unterstützte Quellen)
 - GTK-Kacheln, Suche, Auswahl, Info-Reiter und deutsche Oberfläche
@@ -10,15 +10,27 @@
 - SHA-256-Prüfung mit dem offiziellen Release-Digest, striktes ZIP-Dateischema, Versions- und Python-Syntaxprüfung
 - Versionierte, benutzerlokale Installationen mit stabilem Launcher
 - Automatische Wiederherstellung der Vorversion, wenn DAM nach dem Update nicht erfolgreich startet
-- Manuelles Rollback auf der Info-Seite (nach dem ersten erfolgreichen Selbstupdate)
+- Manuelle Sicherung der aktuellen DAM-Version via Rechtsklick (Markierung statt zusätzlicher Kopie)
+- Info-Reiter: **Speicher & Backups** mit Versionsliste, individueller Wiederherstellung und freiwilliger Bereinigung
+- Aktive und letzte Rückfallversion vor Löschung geschützt; zusätzlich dauerhaft markierte Versionen ebenfalls geschützt
+- Kein automatisches Löschen: nur einzeln ausgewählte ältere Versionen nach Bestätigungsdialog
+- Alte Migrationsstände ohne neueren Neustartmechanismus sind nicht per Ein-Klick-Restore verfügbar
+- Unaufdringlicher Bereinigungshinweis im Info-Reiter ab 250 MiB möglicher Ersparnis
+- Manuelles Rollback über gespeicherte und kompatible frühere DAM-Versionen
 
-**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. v0.6.2 wurde auf dem Ubuntu-Rechner gestartet; v0.6.3 dient als gezieltes Test-Release, um das Update erstmals vollständig über die DAM-Oberfläche durchzuführen. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
+**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. v0.6.2 und v0.6.3 liefen erfolgreich auf dem Ubuntu-Rechner; v0.6.3 wurde vollständig über die DAM-Oberfläche installiert. v0.6.4 ergänzt die Backup- und Bereinigungsverwaltung, deren Bedienung auf dem Ubuntu-Desktop noch praktisch getestet werden muss. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
 
 ### Lokale Installation
 
 Das Bootstrap-Paket `DAM_v0.6.0.zip` entpacken und im entpackten Ordner `bash install.sh` ausführen. Die alte Installation in `~/DAM` und eigene App-Beschreibungen bleiben bestehen.
 
 Danach: Start über das Anwendungsmenü; der stabile Launcher liegt in `~/.local/bin/dam-launcher`. Die aktuelle Programmversion liegt unter `~/.local/share/dam/current`.
+
+### Backups und Bereinigung (v0.6.4)
+
+DAM-Versionen liegen unter `~/.local/share/dam/versions/`. Eine Sicherung per Rechtsklick markiert die vorhandene Version als **dauerhaft behalten**. Der Schutz wird in `~/.local/state/dam/backup-pins.json` gespeichert und übersteht Updates. Im Info-Reiter ist immer sichtbar, welche **älteren** Versionen bereinigt werden könnten und wie groß diese zusammen sind. DAM löscht nie ungefragt Dateien. Die derzeit aktive und die unmittelbare Rückfallversion können nicht gelöscht werden. Schutzmarkierungen anderer Versionen lassen sich bewusst aufheben. Bei einer Wiederherstellung startet DAM automatisch neu und rollt bei Startfehler zurück.
+
+**Geltungsbereich:** Diese Funktion gilt vorerst nur für DAM selbst. App-Backups für APT, Snap und Flatpak müssen jeweils paketquellenspezifisch implementiert werden und sind noch nicht verfügbar. Persönliche Daten und Programmeinstellungen werden nicht gesichert bzw. verändert.
 
 ### Releases
 
