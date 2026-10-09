@@ -22,7 +22,7 @@ Danach: Start über das Anwendungsmenü; der stabile Launcher liegt in `~/.local
 
 ### Releases
 
-Nur bewusst freigegebene stabile Tags `vX.Y.Z` werden veröffentlicht. GitHub Actions prüft den Quellcode und baut das Asset `DAM-vX.Y.Z.zip`. Der Selbst-Updater akzeptiert nur den exakten Assetnamen, die offizielle SHA-256-Prüfsumme und erlaubte Programmdateien. **GitHubs automatisch generiertes Quellcode-ZIP ist nicht als Update geeignet.**
+**Kein manuelles Release nötig:** Sobald eine Version fertig und getestet ist, committen wir `release-request.json` mit derselben Version wie in `dam.py` und `version.json`. Nur dieser gezielte Commit startet GitHub Actions. Der Workflow validiert die Version und Release-Notizen, führt die vollständigen Tests aus, baut `DAM-vX.Y.Z.zip` und erstellt das stabile GitHub-Release samt Download-Asset automatisch. Normale Code-Commits veröffentlichen nichts. Bereits existierende Tags und Releases werden nicht überschrieben. Der Selbst-Updater akzeptiert nur den exakten Assetnamen, die offizielle SHA-256-Prüfsumme und erlaubte Programmdateien. **GitHubs automatisch generiertes Quellcode-ZIP ist nicht als Update geeignet.**
 
 Eine SHA-256-Prüfsumme beweist die Integrität des Pakets gegenüber den GitHub-Metadaten, aber keine unabhängige Autorenschaftssignatur. Ein signierter Veröffentlichungsprozess ist als spätere Verbesserung geplant.
 
