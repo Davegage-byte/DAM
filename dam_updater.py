@@ -407,15 +407,17 @@ def validate_restoration(version):
     root = data_dir()
     folder = _version_path(root, version)
     manifest = folder / 'version.json'
-    required = ('dam.py', 'dam_updater.py', 'version.json')
     if any(not (folder / name).is_file() or (folder / name).is_symlink()
-           for name in required):
+           for name in APP_FILES):
         raise UpdateError('Diese alte DAM-Version unterstützt keine sichere Wiederherstellung')
     try:
         if json.loads(manifest.read_text('utf-8')) != {'schema': 1, 'version': version}:
             raise UpdateError('Gesicherte Version passt nicht zum Versionsmanifest')
-        for name in ('dam.py', 'dam_updater.py'):
-            compile((folder / name).read_bytes(), str(folder / name), 'exec')
+        if not (folder / 'dam.png').read_bytes().startswith(b'\x89PNG\r\n\x1a\n'):
+            raise UpdateError('Gesichertes DAM-Symbol ist beschädigt')
+        for name in APP_FILES:
+            if name.endswith('.py'):
+                compile((folder / name).read_bytes(), str(folder / name), 'exec')
     except (OSError, UnicodeError, ValueError, SyntaxError) as exc:
         raise UpdateError('Gesicherte DAM-Version ist beschädigt') from exc
     return folder
