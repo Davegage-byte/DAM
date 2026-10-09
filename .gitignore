@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# DAM runtime / local state
+*.log
+*.pid
+*.tmp
+*.bak
+*.backup
+*_backup_*.py
+*backup_before_*.py
+.local/
+.cache/
+
+# Credentials and developer secrets
+.env
+.env.*
+*.key
+*.pem
+*.p12
+*.token
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Generated archives; publish packages through Releases later
+*.zip
+*.tar.gz
