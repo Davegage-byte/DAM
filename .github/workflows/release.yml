@@ -1,35 +1,98 @@
-name: DAM Release
+name: DAM Auto-Release
 
 on:
-  release:
-    types: [published]
+  # A deliberate commit of release-request.json starts the release pipeline.
+  # Normal code commits alone never publish an update.
+  push:
+    branches: [main]
+    paths:
+      - release-request.json
+  workflow_dispatch:
 
 permissions:
   contents: write
 
+concurrency:
+  group: dam-release-${{ github.repository }}
+  cancel-in-progress: false
+
 jobs:
-  test-and-release:
+  release:
+    if: github.repository == 'Davegage-byte/DAM'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
-      - name: Checkout tagged source
+      - name: Checkout reviewed commit
         uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Python regression suite
+
+      - name: Validate release request
+        id: metadata
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import ast
+          import json
+          import os
+          from pathlib import Path
+          import re
+
+          request = json.loads(Path('release-request.json').read_text('utf-8'))
+          manifest = json.loads(Path('version.json').read_text('utf-8'))
+          if not isinstance(request, dict) or set(request) != {'schema', 'version', 'notes'}:
+              raise SystemExit('Release request has unexpected fields')
+          if request['schema'] != 1 or manifest.get('schema') != 1:
+              raise SystemExit('Unsupported release request schema')
+          version = request['version']
+          if not isinstance(version, str) or re.fullmatch(r'\d+\.\d+\.\d+', version) is None:
+              raise SystemExit('Invalid release version')
+          if manifest.get('version') != version:
+              raise SystemExit('Release request differs from version.json')
+          tree = ast.parse(Path('dam.py').read_text('utf-8'))
+          versions = [node.value.value for node in tree.body
+                      if isinstance(node, ast.Assign) and isinstance(node.value, ast.Constant)
+                      for target in node.targets
+                      if isinstance(target, ast.Name) and target.id == 'VERSION']
+          if versions != [version]:
+              raise SystemExit('Release request differs from dam.py VERSION')
+          notes = request['notes']
+          if not isinstance(notes, str) or not notes.strip() or len(notes) > 2000:
+              raise SystemExit('Invalid release notes')
+          Path('release-notes.md').write_text(notes.strip() + '\n', 'utf-8')
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f'tag=v{version}\n')
+          print(f'Approved release request: v{version}')
+          PY
+
+      - name: Run all tests
         run: python3 -m unittest discover -p 'test_*.py' -q
-      - name: Build verified release asset
+
+      - name: Build exact update asset
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
-        run: python3 build_release.py --output dist --tag "$RELEASE_TAG"
-      - name: Publish release with official asset
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
+        run: |
+          python3 build_release.py --output dist --tag "$RELEASE_TAG"
+          sha256sum "dist/DAM-$RELEASE_TAG.zip"
+
+      - name: Publish verified release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ steps.metadata.outputs.tag }}
         run: |
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "dist/DAM-$RELEASE_TAG.zip" --clobber
-          else
-            gh release create "$RELEASE_TAG" "dist/DAM-$RELEASE_TAG.zip" \
-              --verify-tag --title "DAM $RELEASE_TAG" \
-              --notes "DAM $RELEASE_TAG – geprüftes Paket für den Selbst-Updater."
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG exists; refusing to replace a published asset." >&2
+            exit 1
           fi
+          if gh api "repos/$REPO/git/ref/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists; refusing to move an existing tag." >&2
+            exit 1
+          fi
+          gh release create "$RELEASE_TAG" "dist/DAM-$RELEASE_TAG.zip" \
+            --repo "$REPO" \
+            --target "$GITHUB_SHA" \
+            --title "DAM $RELEASE_TAG" \
+            --notes-file release-notes.md \
+            --latest
