@@ -231,6 +231,225 @@ def _current_version(root):
     return resolved.name
 
 
+
+# ---------------------- Lokale Sicherungen und Bereinigung -----------------
+# Versionsordner sind bereits vollständige DAM-Programmkopien. Eine Sicherung
+# markiert eine solche Kopie als dauerhaft geschützt, statt sie zu duplizieren.
+
+def _version_path(root, version):
+    version_tuple(version)
+    directory = root / 'versions' / version
+    if not directory.is_dir() or directory.is_symlink():
+        raise UpdateError('Gesicherte DAM-Version existiert nicht')
+    if directory.resolve().parent != (root / 'versions').resolve():
+        raise UpdateError('Unsicherer Versionspfad')
+    return directory
+
+
+def _previous_version():
+    marker = state_dir() / 'previous-version.txt'
+    if not marker.is_file() or marker.is_symlink():
+        return None
+    value = marker.read_text('utf-8').strip()
+    try:
+        version_tuple(value)
+    except UpdateError:
+        return None
+    return value
+
+
+def _read_backup_pins():
+    manifest = state_dir() / 'backup-pins.json'
+    if not manifest.exists():
+        return set()
+    if manifest.is_symlink():
+        raise UpdateError('Sicherungsdatei ist eine Verknüpfung')
+    try:
+        data = json.loads(manifest.read_text('utf-8'))
+        if (not isinstance(data, dict) or data.get('schema') != 1
+                or not isinstance(data.get('versions'), list)
+                or not all(isinstance(v, str) for v in data['versions'])):
+            raise ValueError('Ungültiges Sicherungsformat')
+        for version in data['versions']:
+            version_tuple(version)
+        return set(data['versions'])
+    except (ValueError, UnicodeError) as exc:
+        raise UpdateError('Sicherungsschutz kann nicht gelesen werden; Bereinigung gesperrt') from exc
+
+
+def _write_backup_pins(pins):
+    state = state_dir()
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd, filename = tempfile.mkstemp(prefix='.backup-pins-', dir=state)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as output:
+            json.dump({'schema': 1, 'versions': sorted(pins, key=version_tuple)},
+                      output, ensure_ascii=False)
+            output.write('\n')
+            output.flush()
+            os.fsync(output.fileno())
+        os.chmod(filename, 0o600)
+        os.replace(filename, state / 'backup-pins.json')
+    finally:
+        if os.path.exists(filename):
+            os.unlink(filename)
+
+
+def _backup_lock():
+    state = state_dir()
+    state.mkdir(parents=True, exist_ok=True, mode=0o700)
+    return open(state / 'updater.lock', 'a+', encoding='utf-8')
+
+
+def protect_version(version, protect=True):
+    """Versionskopie explizit behalten / Markierung entfernen."""
+    root = data_dir()
+    with _backup_lock() as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise UpdateError('DAM aktualisiert gerade; bitte erneut versuchen') from exc
+        _version_path(root, version)
+        pins = _read_backup_pins()
+        if protect:
+            pins.add(version)
+        else:
+            pins.discard(version)
+        _write_backup_pins(pins)
+
+
+def _folder_bytes(directory):
+    """Tatsächlich belegte reguläre Dateien, keine Symlinks verfolgen."""
+    total = 0
+    for parent, dirs, files in os.walk(directory, followlinks=False):
+        dirs[:] = [name for name in dirs if not (Path(parent) / name).is_symlink()]
+        for name in files:
+            file = Path(parent) / name
+            if not file.is_symlink():
+                try:
+                    mode = file.stat()
+                except OSError:
+                    continue
+                if stat.S_ISREG(mode.st_mode):
+                    total += mode.st_size
+    return total
+
+
+def stored_versions():
+    """Versionskopien samt Schutz- und Speicherinformationen für die Oberfläche."""
+    root = data_dir()
+    current = _current_version(root)
+    previous = _previous_version()
+    pins = _read_backup_pins()
+    versions = root / 'versions'
+    result = []
+    for folder in versions.iterdir():
+        try:
+            if folder.name.startswith('.') or folder.is_symlink() or not folder.is_dir():
+                continue
+            version_tuple(folder.name)
+            # Nur vollständige und unveränderte lokale Versionspfade behandeln.
+            _version_path(root, folder.name)
+        except (UpdateError, OSError):
+            continue
+        version = folder.name
+        active = version == current
+        rollback = version == previous and not active
+        pinned = version in pins
+        # Alt-Migration 0.5.25 ohne Updater/Handshake nicht als
+        # wiederherstellbar anbieten.
+        restorable = (not active and
+                      all((folder / part).is_file() and
+                          not (folder / part).is_symlink()
+                          for part in ('dam.py', 'dam_updater.py', 'version.json')))
+        result.append(dict(
+            version=version, size_bytes=_folder_bytes(folder),
+            active=active, rollback=rollback, pinned=pinned,
+            restorable=restorable,
+            deletable=not (active or rollback or pinned),
+        ))
+    return sorted(result, key=lambda row: version_tuple(row['version']), reverse=True)
+
+
+def delete_stored_versions(versions):
+    """Explizit ausgewählte, ungeschützte Versionskopien entfernen."""
+    if not isinstance(versions, (tuple, list, set)) or not versions:
+        raise UpdateError('Keine Versionen zur Bereinigung ausgewählt')
+    requested = list(versions)
+    if len(set(requested)) != len(requested):
+        raise UpdateError('Version mehrfach ausgewählt')
+    for version in requested:
+        version_tuple(version)
+    root = data_dir()
+    with _backup_lock() as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise UpdateError('DAM aktualisiert gerade; bitte erneut versuchen') from exc
+        current = _current_version(root)
+        previous = _previous_version()
+        pinned = _read_backup_pins()
+        if any(v == current or v == previous or v in pinned for v in requested):
+            raise UpdateError('Aktuelle, letzte oder geschützte Version darf nicht gelöscht werden')
+        targets = [_version_path(root, v) for v in requested]
+        for directory in targets:
+            # Pfade vor dem ersten Entfernen vollständig validiert.
+            if directory.is_symlink() or directory.resolve().parent != (root / 'versions').resolve():
+                raise UpdateError('Unsicherer Bereinigungspfad')
+        saved = sum(_folder_bytes(folder) for folder in targets)
+        for directory in targets:
+            shutil.rmtree(directory)
+        return saved
+
+
+def validate_restoration(version):
+    """Reparatur vor dem Wechsel prüfen; ältere Migrationsstände ablehnen."""
+    root = data_dir()
+    folder = _version_path(root, version)
+    manifest = folder / 'version.json'
+    required = ('dam.py', 'dam_updater.py', 'version.json')
+    if any(not (folder / name).is_file() or (folder / name).is_symlink()
+           for name in required):
+        raise UpdateError('Diese alte DAM-Version unterstützt keine sichere Wiederherstellung')
+    try:
+        if json.loads(manifest.read_text('utf-8')) != {'schema': 1, 'version': version}:
+            raise UpdateError('Gesicherte Version passt nicht zum Versionsmanifest')
+        for name in ('dam.py', 'dam_updater.py'):
+            compile((folder / name).read_bytes(), str(folder / name), 'exec')
+    except (OSError, UnicodeError, ValueError, SyntaxError) as exc:
+        raise UpdateError('Gesicherte DAM-Version ist beschädigt') from exc
+    return folder
+
+
+def restore(previous_pid, version):
+    """Beliebige gesicherte DAM-Version per Neustart mit automatischem Rollback."""
+    root = data_dir()
+    with _backup_lock() as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise UpdateError('DAM aktualisiert gerade; bitte erneut versuchen') from exc
+        _wait_for_pid(previous_pid)
+        current = _current_version(root)
+        if version == current:
+            raise UpdateError('Die ausgewählte DAM-Version ist bereits aktiv')
+        validate_restoration(version)
+        _switch_current(root, version)
+        try:
+            _launch_and_wait(root)
+            (state_dir() / 'previous-version.txt').write_text(current + '\n', 'utf-8')
+            (state_dir() / 'updater-error.json').unlink(missing_ok=True)
+        except Exception as exc:
+            _switch_current(root, current)
+            _record_failure(str(exc), version)
+            try:
+                subprocess.Popen([str(Path.home() / '.local' / 'bin' / 'dam-launcher')],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, start_new_session=True)
+            except OSError:
+                pass
+            raise
+
 def _wait_for_pid(pid, timeout=25):
     if pid <= 0 or pid == os.getpid():
         raise UpdateError('Ungültige DAM-Prozess-ID')
@@ -348,6 +567,8 @@ def main(argv):
         activate(int(argv[2]), argv[3])
     elif len(argv) == 3 and argv[1] == 'rollback':
         rollback(int(argv[2]))
+    elif len(argv) == 4 and argv[1] == 'restore':
+        restore(int(argv[2]), argv[3])
     else:
         raise UpdateError('Ungültiger Updater-Aufruf')
 
