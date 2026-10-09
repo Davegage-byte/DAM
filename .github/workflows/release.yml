@@ -1,0 +1,36 @@
+name: DAM Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  test-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Python regression suite
+        run: python3 -m unittest discover -p 'test_*.py' -q
+      - name: Build verified release asset
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python3 build_release.py --output dist --tag "$RELEASE_TAG"
+      - name: Publish release with official asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "dist/DAM-$RELEASE_TAG.zip" --clobber
+          else
+            gh release create "$RELEASE_TAG" "dist/DAM-$RELEASE_TAG.zip" \
+              --verify-tag --title "DAM $RELEASE_TAG" \
+              --notes "DAM $RELEASE_TAG – geprüftes Paket für den Selbst-Updater."
+          fi
