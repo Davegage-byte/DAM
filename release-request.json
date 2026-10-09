@@ -1,5 +1,5 @@
 {
   "schema": 1,
-  "version": "0.6.3",
-  "notes": "## DAM v0.6.3\n\nTest-Release für das erste vollständig grafische Selbstupdate von DAM v0.6.2.\n\n- Versionssprung auf 0.6.3 ohne Funktionsänderungen.\n- Weiterhin sicherer Download mit SHA-256-Prüfung, automatischer Neustart und Rollback bei Startfehlern.\n- Ziel: DAM-Update direkt im Reiter „Aktualisieren“ erkennen, auswählen und installieren.\n\nBitte das Update ausschließlich über die DAM-Oberfläche testen."
+  "version": "0.6.4",
+  "notes": "## DAM v0.6.4 – Speicher & Backups\n\nNeue Backup-Verwaltung für DAM selbst:\n\n- Rechtsklick auf DAM: Aktuelle Version dauerhaft als Sicherung markieren, ohne Platz durch eine zweite Kopie zu verschwenden.\n- Info-Reiter: „Speicher & Backups“ zeigt vorhandene Versionen und potenzielle Speicherersparnis.\n- Gespeicherte kompatible DAM-Versionen gezielt wiederherstellen; bei Startfehler automatischer Rollback.\n- Frei wählbare Bereinigung älterer, ungeschützter Versionen nach ausdrücklicher Bestätigung.\n- Aktive Version und letzte Rückfallversion sind immer gegen Löschung geschützt.\n- Ruhiger Hinweis im Info-Reiter ab 250 MiB potenziell freigebbarem Speicher.\n\n**Wichtig:** Keine automatische Löschung. Nur DAM-Versionen; Backups anderer Apps folgen in einer späteren Version. Nach Update bitte zunächst nur die Anzeige testen, noch keine Sicherungen löschen."
 }
