@@ -1,5 +1,5 @@
 {
   "schema": 1,
-  "version": "0.6.1",
-  "notes": "## DAM v0.6.1\n\nErstes automatisch aus einem freigegebenen Commit gebautes DAM-Release zum Test des Selbstupdates von v0.6.0 auf v0.6.1.\n\n- Aktualisierung direkt im Reiter „Aktualisieren“.\n- SHA-256-, Versions- und ZIP-Sicherheitsprüfung vor dem Aktivieren.\n- Neustart über den stabilen DAM-Launcher.\n- Automatischer Rollback bei fehlgeschlagenem Start.\n\n**Hinweis:** Dies ist der erste praktische Ende-zu-Ende-Test des Update-Verfahrens."
+  "version": "0.6.2",
+  "notes": "## DAM v0.6.2\n\nFehlerbehebung für die erstmalige Selbstaktualisierung von DAM v0.6.0.\n\n- DAM wird im Reiter „Aktualisieren“ auch dann angezeigt, wenn Ubuntu seinen lokalen Desktop-Starter nicht über Gio.AppInfo auflistet.\n- Fehler einzelner Updatequellen erscheinen direkt im Statusbereich statt nur als allgemeiner Hinweis.\n- Vier neue Regressionstests sichern die Erkennung und Anzeige von DAM-Updates ab.\n- Die bestehende Oberfläche und der sichere Update-/Rollback-Mechanismus bleiben erhalten.\n\nDies ist ein gezieltes Korrektur-Release. Bitte den Selbstupdate-Ablauf unter Ubuntu prüfen."
 }
