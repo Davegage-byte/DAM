@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DAM 0.6.0 – mit sicherem Selbstupdate über GitHub-Releases."""
+"""DAM 0.6.1 – mit sicherem Selbstupdate über GitHub-Releases."""
 import gzip
 import json
 import math
@@ -28,7 +28,7 @@ import app_shortcuts
 import apt_install
 import apt_remove
 
-VERSION = '0.6.0'
+VERSION = '0.6.1'
 # Nur technische Fehler und Paketaktionen protokollieren, niemals Passwörter.
 _LOG_DIR = os.path.expanduser('~/.local/state/dam')
 try:
