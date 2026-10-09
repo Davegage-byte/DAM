@@ -107,6 +107,15 @@ APP_DESCRIPTIONS = {
 }
 
 
+def backup_protection_action(backup):
+    """Beschriftung und Editierbarkeit des DAM-Sicherungsschutzes."""
+    if backup['active']:
+        return 'Aktiv 🔒', False
+    if backup['rollback']:
+        return 'Rückfallversion 🔒', False
+    return ('Schutz aufheben' if backup['pinned'] else 'Behalten'), True
+
+
 def custom_descriptions():
     """Nutzervorgaben aus dem dauerhaften Konfigurationspfad laden.
 
@@ -2171,17 +2180,11 @@ class DAM(Adw.Application):
                 name.set_hexpand(True)
                 row.append(name)
                 # Aktive und unmittelbare Rückfallversion bleiben immer
-                # geschützt. Eine evtl. gespeicherte Pin-Markierung bleibt
-                # unverändert und kann später erneut bearbeitet werden.
-                if backup['active']:
-                    protect = Gtk.Button(label='Aktiv 🔒')
-                    protect.set_sensitive(False)
-                elif backup['rollback']:
-                    protect = Gtk.Button(label='Rückfallversion 🔒')
-                    protect.set_sensitive(False)
-                else:
-                    protect = Gtk.Button(
-                        label='Schutz aufheben' if backup['pinned'] else 'Behalten')
+                # geschützt, unabhängig von eventuell bestehenden Pins.
+                protection_label, can_change = backup_protection_action(backup)
+                protect = Gtk.Button(label=protection_label)
+                protect.set_sensitive(can_change)
+                if can_change:
                     protect.connect('clicked', lambda _btn, v=version, mark=not backup['pinned']:
                                     on_protect(v, mark))
                 row.append(protect)
