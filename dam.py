@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DAM 0.6.3 – Selbstupdate-Praxistest über die Oberfläche."""
+"""DAM 0.6.4 – Manuelle Backup-Verwaltung und Versionsbereinigung."""
 import gzip
 import json
 import math
@@ -28,7 +28,7 @@ import app_shortcuts
 import apt_install
 import apt_remove
 
-VERSION = '0.6.3'
+VERSION = '0.6.4'
 # Nur technische Fehler und Paketaktionen protokollieren, niemals Passwörter.
 _LOG_DIR = os.path.expanduser('~/.local/state/dam')
 try:
