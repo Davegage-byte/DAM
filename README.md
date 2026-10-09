@@ -2,7 +2,7 @@
 
 **DAM** ist ein grafischer App-Manager für Ubuntu (GTK 4 / Libadwaita).
 
-## Stand: v0.6.4 – Manuelle DAM-Backups und Bereinigung
+## Stand: v0.6.5 – Verbesserte Backup-Anzeige und Konfiguration
 
 - Apps installieren, aktualisieren und deinstallieren (unterstützte Quellen)
 - GTK-Kacheln, Suche, Auswahl, Info-Reiter und deutsche Oberfläche
@@ -18,11 +18,11 @@
 - Unaufdringlicher Bereinigungshinweis im Info-Reiter ab 250 MiB möglicher Ersparnis
 - Manuelles Rollback über gespeicherte und kompatible frühere DAM-Versionen
 
-**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. v0.6.2 und v0.6.3 liefen erfolgreich auf dem Ubuntu-Rechner; v0.6.3 wurde vollständig über die DAM-Oberfläche installiert. v0.6.4 ergänzt die Backup- und Bereinigungsverwaltung, deren Bedienung auf dem Ubuntu-Desktop noch praktisch getestet werden muss. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
+**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. v0.6.2 und v0.6.3 liefen erfolgreich auf dem Ubuntu-Rechner; v0.6.3 wurde vollständig über die DAM-Oberfläche installiert. v0.6.4 ergänzt die Backup- und Bereinigungsverwaltung. Auf dem Ubuntu-Desktop wurden ihre Darstellung, das dauerhafte Schützen einer älteren Version sowie der Wechsel 0.6.4 → 0.6.3 → 0.6.4 erfolgreich getestet. v0.6.5 beseitigt zwei kleine Unstimmigkeiten aus diesem Praxistest. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
 
 ### Lokale Installation
 
-Das Bootstrap-Paket `DAM_v0.6.0.zip` entpacken und im entpackten Ordner `bash install.sh` ausführen. Die alte Installation in `~/DAM` und eigene App-Beschreibungen bleiben bestehen.
+Das Bootstrap-Paket `DAM_v0.6.0.zip` entpacken und im entpackten Ordner `bash install.sh` ausführen. Bestehende Nutzerdaten bleiben unangetastet; der alte `~/DAM`-Pfad wird nur als Kompatibilitätsfallback für App-Beschreibungen gelesen.
 
 Danach: Start über das Anwendungsmenü; der stabile Launcher liegt in `~/.local/bin/dam-launcher`. Die aktuelle Programmversion liegt unter `~/.local/share/dam/current`.
 
@@ -31,6 +31,13 @@ Danach: Start über das Anwendungsmenü; der stabile Launcher liegt in `~/.local
 DAM-Versionen liegen unter `~/.local/share/dam/versions/`. Eine Sicherung per Rechtsklick markiert die vorhandene Version als **dauerhaft behalten**. Der Schutz wird in `~/.local/state/dam/backup-pins.json` gespeichert und übersteht Updates. Im Info-Reiter ist immer sichtbar, welche **älteren** Versionen bereinigt werden könnten und wie groß diese zusammen sind. DAM löscht nie ungefragt Dateien. Die derzeit aktive und die unmittelbare Rückfallversion können nicht gelöscht werden. Schutzmarkierungen anderer Versionen lassen sich bewusst aufheben. Bei einer Wiederherstellung startet DAM automatisch neu und rollt bei Startfehler zurück.
 
 **Geltungsbereich:** Diese Funktion gilt vorerst nur für DAM selbst. App-Backups für APT, Snap und Flatpak müssen jeweils paketquellenspezifisch implementiert werden und sind noch nicht verfügbar. Persönliche Daten und Programmeinstellungen werden nicht gesichert bzw. verändert.
+
+### Änderungen in v0.6.5
+
+- Die aktive DAM-Version zeigt „Aktiv 🔒“ statt „Schutz aufheben“; die letzte Rückfallversion zeigt „Rückfallversion 🔒“. Beide Schaltflächen sind deaktiviert.
+- Bestehende manuelle Schutzmarkierungen bleiben unverändert erhalten. Ältere Versionen behalten die Schaltflächen „Behalten“ und „Schutz aufheben“.
+- Eigene App-Beschreibungen können dauerhaft unter `~/.config/dam/app_beschreibungen.json` liegen. Ältere Dateien unter `~/DAM/app_beschreibungen.json` werden weiterhin gelesen, falls die neue Datei nicht existiert.
+- 7 zusätzliche Regressionstests sichern die UI-Schutzanzeigen und die neuen/alten Speicherorte ab.
 
 ### Releases
 
