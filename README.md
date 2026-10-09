@@ -11,7 +11,7 @@
 - Desktop-Verknüpfungen und Autostart über das Kontextmenü
 - Deutsche Benutzeroberfläche, getrennte Farbschemata und animierte Info-Seite
 
-**Status:** Aktuell lokal entwickelte Anwendung. Der Quellcode wird im nächsten Schritt übertragen; dieses Repository enthält bis dahin noch keine lauffähige DAM-Version.
+**Status:** Der Quellcode der getesteten lokalen v0.5.25 liegt im Repository. Selbstupdates und automatische GitHub-Releases sind noch in Planung (siehe [Selbstupdate-Plan](docs/SELBSTUPDATE_PLAN.md)).
 
 ## Geplanter Aufbau
 
