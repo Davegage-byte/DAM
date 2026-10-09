@@ -16,6 +16,11 @@ venv/
 .local/
 .cache/
 
+# User-specific DAM app descriptions / settings (separate private AppList repo)
+app_beschreibungen.json
+settings.local.json
+*.local.json
+
 # Credentials and developer secrets
 .env
 .env.*
