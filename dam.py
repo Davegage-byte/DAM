@@ -739,6 +739,7 @@ class DAM(Adw.Application):
         if mode == 'info':
             self.content_stack.set_visible_child_name('info')
             self.info_button.set_tooltip_text('Zur App-Übersicht zurück')
+            self.refresh_backup_summary()
         else:
             self._last_main_mode = mode
             self.stack.set_visible_child_name(mode)
@@ -816,12 +817,26 @@ class DAM(Adw.Application):
                 'Beim Öffnen von „Aktualisieren“ prüft DAM auch sein offizielles GitHub-Release. '
                 'Neue Versionen werden heruntergeladen, geprüft und erst nach einem Neustart aktiviert. '
                 'Falls DAM nicht startet, stellt der Updater die vorherige Version wieder her.')
-        rollback_file = os.path.expanduser('~/.local/state/dam/previous-version.txt')
-        if os.path.isfile(rollback_file):
-            rollback_button = Gtk.Button(label='Vorherige DAM-Version wiederherstellen')
-            rollback_button.set_halign(Gtk.Align.START)
-            rollback_button.connect('clicked', self.confirm_dam_rollback)
-            box.append(rollback_button)
+        section('Speicher & Backups',
+                'DAM speichert seine Programmversionen bereits getrennt. '
+                'Mit „Aktuelle Version sichern“ beim Rechtsklick schützt du eine '
+                'Version dauerhaft – ohne eine zweite Kopie anzulegen. '
+                'Bereinigung erfolgt ausschließlich auf deine Bestätigung.')
+        self.backup_summary = Gtk.Label(label='Gesicherte DAM-Versionen werden geprüft …')
+        self.backup_summary.add_css_class('dim-label')
+        self.backup_summary.set_xalign(0)
+        self.backup_summary.set_wrap(True)
+        box.append(self.backup_summary)
+        manage = Gtk.Button(label='Backups verwalten / Bereinigen')
+        manage.set_halign(Gtk.Align.START)
+        manage.connect('clicked', self.open_dam_backups)
+        box.append(manage)
+        self.backup_notice = Gtk.Label(label='')
+        self.backup_notice.add_css_class('dim-label')
+        self.backup_notice.set_xalign(0)
+        self.backup_notice.set_wrap(True)
+        box.append(self.backup_notice)
+        self.refresh_backup_summary()
         section('Administratorrechte',
                 'Ubuntu fragt bei Paketänderungen nach Administratorrechten. DAM speichert '
                 'keine Passwörter. Die gezeigten Versions- und Datumsinformationen können '
@@ -1202,6 +1217,20 @@ class DAM(Adw.Application):
             reason = Gtk.Label(label='Kein nutzbarer App-Starter vorhanden.')
             reason.add_css_class('dim-label')
             content.append(reason)
+        if item.get('package') == 'dam' and (
+                item.get('is_installed') or
+                os.path.isfile(os.path.expanduser('~/.local/share/dam/current/dam.py'))):
+            save = Gtk.Button(label='Aktuelle Version sichern')
+            save.connect('clicked', lambda *_: self.pin_current_dam_version(status, pop))
+            content.append(save)
+            backups = Gtk.Button(label='Backups verwalten / Version wiederherstellen…')
+            backups.connect('clicked', lambda *_: (pop.popdown(), self.open_dam_backups()))
+            content.append(backups)
+        else:
+            note = Gtk.Label(label='Programm-Backups folgen in einer späteren Version.')
+            note.add_css_class('dim-label')
+            note.set_wrap(True)
+            content.append(note)
         pop.set_child(content)
         pop.set_parent(tile)
         rectangle = Gdk.Rectangle()
@@ -1971,6 +2000,279 @@ class DAM(Adw.Application):
             status.set_text('Fehler bei der Abschlussverarbeitung: ' + str(exc)[:140]
                             + ' – Protokoll: ~/.local/state/dam/dam.log')
         return False
+
+    def refresh_backup_summary(self):
+        """Info-Seite zeigt nur mögliche Einsparungen, nie automatische Löschung."""
+        if not hasattr(self, 'backup_summary'):
+            return
+        try:
+            versions = dam_updater.stored_versions()
+            possible = sum(row['size_bytes'] for row in versions if row['deletable'])
+            self.backup_summary.set_text(
+                f"{len(versions)} DAM-Version(en) gespeichert · "
+                f"{self._backup_size(possible)} freiwillig freigebbar.")
+            if possible >= 250 * 1024 * 1024:
+                self.backup_notice.set_text(
+                    f"Hinweis: Durch das Aufräumen älterer Versionen könntest du "
+                    f"{self._backup_size(possible)} sparen. Es wird nichts automatisch gelöscht.")
+            else:
+                self.backup_notice.set_text('')
+        except (OSError, ValueError, dam_updater.UpdateError) as exc:
+            self.backup_summary.set_text('Backup-Übersicht konnte nicht geladen werden: ' + str(exc)[:150])
+            self.backup_notice.set_text('')
+
+    @staticmethod
+    def _backup_size(count):
+        if count >= 1024 * 1024 * 1024:
+            return f'{count / (1024 ** 3):.2f} GB'
+        if count >= 1024 * 1024:
+            return f'{count / (1024 ** 2):.1f} MB'
+        return f'{count / 1024:.1f} KB'
+
+    def pin_current_dam_version(self, status, popover):
+        """Rechtsklick sichert die aktuelle Versionskopie ohne Speicherduplikat."""
+        popover.popdown()
+        try:
+            current = dam_updater._current_version(dam_updater.data_dir())
+            dam_updater.protect_version(current, True)
+            status.set_text(f'DAM {current} als dauerhaftes Backup geschützt.')
+            self.refresh_backup_summary()
+        except (OSError, ValueError, dam_updater.UpdateError) as exc:
+            status.set_text('Sicherung fehlgeschlagen: ' + str(exc)[:180])
+
+    def open_dam_backups(self, *_):
+        """Dialog für gezielte Versionswahl, Schutz und bewusste Bereinigung."""
+        try:
+            dam_updater.stored_versions()
+        except (OSError, ValueError, dam_updater.UpdateError) as exc:
+            dlg = Adw.MessageDialog.new(self.window, 'Sicherungen nicht verfügbar', str(exc)[:240])
+            dlg.add_response('ok', 'OK')
+            dlg.present()
+            return
+        window = Gtk.Window(title='DAM – Speicher & Backups')
+        window.set_transient_for(self.window)
+        window.set_modal(True)
+        window.set_default_size(690, 535)
+        panel = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
+        panel.set_margin_start(20)
+        panel.set_margin_end(20)
+        panel.set_margin_top(20)
+        panel.set_margin_bottom(20)
+
+        title = Gtk.Label(label='Gesicherte DAM-Versionen')
+        title.add_css_class('title-2')
+        title.set_xalign(0)
+        panel.append(title)
+        description = Gtk.Label(
+            label='Die aktive und die letzte Rückfallversion sind immer geschützt. '
+                  'Weitere Versionen kannst du dauerhaft behalten, wiederherstellen '
+                  'oder gezielt zur Bereinigung auswählen.')
+        description.set_xalign(0)
+        description.set_wrap(True)
+        panel.append(description)
+        summary = Gtk.Label()
+        summary.add_css_class('dim-label')
+        summary.set_xalign(0)
+        panel.append(summary)
+
+        scroll = Gtk.ScrolledWindow()
+        scroll.set_vexpand(True)
+        scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        entries = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        scroll.set_child(entries)
+        panel.append(scroll)
+
+        selection_status = Gtk.Label(label='Keine Sicherung ausgewählt.')
+        selection_status.set_xalign(0)
+        selection_status.add_css_class('dim-label')
+        panel.append(selection_status)
+        message = Gtk.Label(label='')
+        message.set_xalign(0)
+        message.set_wrap(True)
+        message.add_css_class('dim-label')
+        panel.append(message)
+
+        controls = Gtk.Box(spacing=8)
+        all_button = Gtk.Button(label='Ältere auswählen')
+        controls.append(all_button)
+        delete_button = Gtk.Button(label='Ausgewählte löschen')
+        delete_button.add_css_class('destructive-action')
+        delete_button.set_sensitive(False)
+        controls.append(delete_button)
+        close_button = Gtk.Button(label='Schließen')
+        close_button.connect('clicked', lambda *_: window.close())
+        controls.append(close_button)
+        panel.append(controls)
+        window.set_child(panel)
+
+        selected = set()
+        visible_rows = []
+        checkboxes = {}
+
+        def update_selection():
+            eligible = {r['version']: r for r in visible_rows if r['deletable']}
+            selected.intersection_update(eligible)
+            total = sum(eligible[v]['size_bytes'] for v in selected)
+            selection_status.set_text(
+                f"{len(selected)} Version(en) ausgewählt · "
+                f"{self._backup_size(total)} freigebbar")
+            delete_button.set_sensitive(bool(selected))
+
+        def on_check(check, version):
+            if check.get_active():
+                selected.add(version)
+            else:
+                selected.discard(version)
+            update_selection()
+
+        def refresh():
+            nonlocal visible_rows
+            try:
+                visible_rows = dam_updater.stored_versions()
+            except (OSError, ValueError, dam_updater.UpdateError) as exc:
+                message.set_text('Fehler beim Lesen: ' + str(exc)[:170])
+                return
+            while child := entries.get_first_child():
+                entries.remove(child)
+            checkboxes.clear()
+            reclaimable = sum(x['size_bytes'] for x in visible_rows if x['deletable'])
+            summary.set_text(
+                f"{len(visible_rows)} Version(en) vorhanden · "
+                f"{self._backup_size(reclaimable)} bereinigbar · "
+                'kein automatisches Löschen')
+            for backup in visible_rows:
+                version = backup['version']
+                row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+                row.set_margin_top(5)
+                row.set_margin_bottom(5)
+                check = Gtk.CheckButton()
+                check.set_sensitive(backup['deletable'])
+                check.set_active(version in selected and backup['deletable'])
+                check.connect('toggled', on_check, version)
+                row.append(check)
+                checkboxes[version] = check
+
+                state = ('Aktiv' if backup['active'] else
+                         'Letzte Rückfallversion' if backup['rollback'] else
+                         'Dauerhaft gesichert' if backup['pinned'] else
+                         'Ältere Version')
+                name = Gtk.Label(
+                    label=f"v{version} · {self._backup_size(backup['size_bytes'])}\n{state}")
+                name.set_xalign(0)
+                name.set_hexpand(True)
+                row.append(name)
+                protect = Gtk.Button(
+                    label='Schutz aufheben' if backup['pinned'] else 'Behalten')
+                if backup['active'] or backup['rollback']:
+                    protect.set_tooltip_text('Version bleibt unabhängig davon geschützt')
+                protect.connect('clicked', lambda _btn, v=version, mark=not backup['pinned']:
+                                on_protect(v, mark))
+                row.append(protect)
+
+                restore = Gtk.Button(label='Wiederherstellen')
+                restore.set_sensitive(backup['restorable'])
+                if backup['active']:
+                    restore.set_tooltip_text('Diese Version läuft bereits')
+                elif not backup['restorable']:
+                    restore.set_tooltip_text('Alte Migration ohne gesicherten Neustart nicht wiederherstellbar')
+                restore.connect('clicked', lambda _btn, v=version: self.confirm_dam_restore(v, window))
+                row.append(restore)
+                entries.append(row)
+                entries.append(Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL))
+            update_selection()
+            self.refresh_backup_summary()
+
+        def on_protect(version, mark):
+            try:
+                dam_updater.protect_version(version, mark)
+                message.set_text(
+                    f'DAM v{version} ' +
+                    ('wird dauerhaft behalten.' if mark else 'ist nicht mehr zusätzlich fixiert.'))
+                refresh()
+            except (OSError, ValueError, dam_updater.UpdateError) as exc:
+                message.set_text('Schutzänderung fehlgeschlagen: ' + str(exc)[:180])
+
+        def select_older(*_):
+            candidates = [r['version'] for r in visible_rows if r['deletable']]
+            if candidates and all(v in selected for v in candidates):
+                selected.clear()
+            else:
+                selected.update(candidates)
+            for version, check in checkboxes.items():
+                check.set_active(version in selected)
+            update_selection()
+
+        def confirm_cleanup(*_):
+            eligible = {r['version']: r for r in dam_updater.stored_versions()
+                        if r['deletable']}
+            target = sorted(v for v in selected if v in eligible)
+            if not target:
+                message.set_text('Keine löschbaren Versionen ausgewählt.')
+                refresh()
+                return
+            total = sum(eligible[v]['size_bytes'] for v in target)
+            dlg = Adw.MessageDialog.new(
+                window, f'{len(target)} DAM-Version(en) endgültig löschen?',
+                f"Ausgewählt: {', '.join('v' + v for v in target)}\n"
+                f"Mögliche Ersparnis: {self._backup_size(total)}.\n\n"
+                'Aktive, letzte und dauerhaft geschützte Versionen bleiben erhalten.')
+            dlg.add_response('cancel', 'Abbrechen')
+            dlg.add_response('delete', 'Endgültig löschen')
+            dlg.set_response_appearance('delete', Adw.ResponseAppearance.DESTRUCTIVE)
+            dlg.set_default_response('cancel')
+            dlg.set_close_response('cancel')
+
+            def on_response(_dlg, response):
+                if response != 'delete':
+                    return
+                try:
+                    freed = dam_updater.delete_stored_versions(target)
+                    selected.difference_update(target)
+                    message.set_text(
+                        f'{len(target)} ältere Version(en) gelöscht · '
+                        f'{self._backup_size(freed)} freigegeben.')
+                except (OSError, ValueError, dam_updater.UpdateError) as exc:
+                    message.set_text('Bereinigung gestoppt: ' + str(exc)[:190])
+                refresh()
+
+            dlg.connect('response', on_response)
+            dlg.present()
+
+        all_button.connect('clicked', select_older)
+        delete_button.connect('clicked', confirm_cleanup)
+        refresh()
+        window.present()
+
+    def confirm_dam_restore(self, version, parent):
+        """Einzelne gesicherte Version bewusst mit Rollback-Schutz aktivieren."""
+        if any((self.update_check_running, self.update_install_running,
+                self.install_running, self.remove_running, self.list_refresh_running)):
+            return
+        try:
+            dam_updater.validate_restoration(version)
+        except (OSError, ValueError, dam_updater.UpdateError) as exc:
+            dlg = Adw.MessageDialog.new(parent, 'Wiederherstellung nicht möglich', str(exc)[:220])
+            dlg.add_response('ok', 'OK')
+            dlg.present()
+            return
+        dlg = Adw.MessageDialog.new(
+            parent, f'DAM v{version} wiederherstellen?',
+            'DAM wird beendet und mit der ausgewählten Version neu gestartet. '
+            'Die bisher aktive Version bleibt als Rückfallversion erhalten. '
+            'Persönliche Einstellungen werden nicht verändert.')
+        dlg.add_response('cancel', 'Abbrechen')
+        dlg.add_response('restore', 'Wiederherstellen')
+        dlg.set_response_appearance('restore', Adw.ResponseAppearance.SUGGESTED)
+        dlg.set_default_response('cancel')
+        dlg.set_close_response('cancel')
+
+        def on_response(_dlg, answer):
+            if answer == 'restore':
+                parent.close()
+                self._run_dam_updater('restore', version)
+
+        dlg.connect('response', on_response)
+        dlg.present()
 
     def confirm_dam_rollback(self, *_):
         """Bewusste manuelle Rückkehr zur letzten funktionierenden Version."""
