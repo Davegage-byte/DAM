@@ -2,7 +2,7 @@
 
 **DAM** ist ein grafischer App-Manager für Ubuntu (GTK 4 / Libadwaita).
 
-## Stand: v0.6.2 – Update-Katalog-Fix (Praxistest)
+## Stand: v0.6.3 – GUI-Selbstupdate-Praxistest
 
 - Apps installieren, aktualisieren und deinstallieren (unterstützte Quellen)
 - GTK-Kacheln, Suche, Auswahl, Info-Reiter und deutsche Oberfläche
@@ -12,7 +12,7 @@
 - Automatische Wiederherstellung der Vorversion, wenn DAM nach dem Update nicht erfolgreich startet
 - Manuelles Rollback auf der Info-Seite (nach dem ersten erfolgreichen Selbstupdate)
 
-**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. Ein vollständiger Selbstupdate-Test unter Ubuntu steht noch aus. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
+**Wichtig:** v0.6.0 wurde unter Ubuntu erfolgreich über den neuen Launcher gestartet. v0.6.1 hat die neue Version über GitHub erkannt, wurde jedoch nicht als Kachel angezeigt, wenn Gio den DAM-Starter nicht listete. v0.6.2 korrigiert das und zeigt konkrete Fehlerquellen direkt an. v0.6.2 wurde auf dem Ubuntu-Rechner gestartet; v0.6.3 dient als gezieltes Test-Release, um das Update erstmals vollständig über die DAM-Oberfläche durchzuführen. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
 
 ### Lokale Installation
 
