@@ -739,7 +739,8 @@ class DAM(Adw.Application):
         if mode == 'info':
             self.content_stack.set_visible_child_name('info')
             self.info_button.set_tooltip_text('Zur App-Übersicht zurück')
-            self.refresh_backup_summary()
+            if hasattr(self, 'refresh_backup_summary'):
+                self.refresh_backup_summary()
         else:
             self._last_main_mode = mode
             self.stack.set_visible_child_name(mode)
