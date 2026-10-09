@@ -1,26 +1,35 @@
 # DAM
 
-**DAM** ist ein grafischer App-Manager für Ubuntu mit nativer GTK-4/Libadwaita-Oberfläche.
+**DAM** ist ein grafischer App-Manager für Ubuntu (GTK 4 / Libadwaita).
 
-## Funktionen (lokaler Entwicklungsstand v0.5.25)
+## Stand: v0.6.0 – Beta / Praxistest
 
-- Anwendungen installieren, aktualisieren und deinstallieren
-- Kachelansicht mit Suche, Mehrfachauswahl und App-Informationen
-- Update-Erkennung über APT, Snap, Flatpak und RustDesk/GitHub
-- Sichere APT-Installation und -Deinstallation ausgewählter Apps
-- Desktop-Verknüpfungen und Autostart über das Kontextmenü
-- Deutsche Benutzeroberfläche, getrennte Farbschemata und animierte Info-Seite
+- Apps installieren, aktualisieren und deinstallieren (unterstützte Quellen)
+- GTK-Kacheln, Suche, Auswahl, Info-Reiter und deutsche Oberfläche
+- DAM-Selbstupdate über stabile öffentliche GitHub-Releases
+- SHA-256-Prüfung mit dem offiziellen Release-Digest, striktes ZIP-Dateischema, Versions- und Python-Syntaxprüfung
+- Versionierte, benutzerlokale Installationen mit stabilem Launcher
+- Automatische Wiederherstellung der Vorversion, wenn DAM nach dem Update nicht erfolgreich startet
+- Manuelles Rollback auf der Info-Seite (nach dem ersten erfolgreichen Selbstupdate)
 
-**Status:** Der Quellcode der getesteten lokalen v0.5.25 liegt im Repository. Selbstupdates und automatische GitHub-Releases sind noch in Planung (siehe [Selbstupdate-Plan](docs/SELBSTUPDATE_PLAN.md)).
+**Wichtig:** Die v0.6.0 ist noch nicht auf dem Ubuntu-Desktop praktisch getestet. Es existiert noch kein freigegebenes Release. Der erste Einstieg erfolgt einmalig über `install.sh` aus dem Bootstrap-Paket.
 
-## Geplanter Aufbau
+### Lokale Installation
 
-- Quellcode, Tests, Installationsskript und App-Symbole in diesem Repository
-- Persönliche App-Sammlung getrennt im Repository `DAM-AppList` (später)
-- Versionspakete und Selbstupdates über GitHub Releases (später)
+Das Bootstrap-Paket `DAM_v0.6.0.zip` entpacken und im entpackten Ordner `bash install.sh` ausführen. Die alte Installation in `~/DAM` und eigene App-Beschreibungen bleiben bestehen.
 
-## Sicherheit
+Danach: Start über das Anwendungsmenü; der stabile Launcher liegt in `~/.local/bin/dam-launcher`. Die aktuelle Programmversion liegt unter `~/.local/share/dam/current`.
 
-Für Paketänderungen nutzt DAM die Ubuntu-Rechteverwaltung. Es werden keine Administratorpasswörter im Repository gespeichert. Vor dem Veröffentlichen eines Releases müssen Quellcode und Installationsskript geprüft und die Aktualisierung getestet werden.
+### Releases
 
-**Hinweis zu privaten Repositories:** Eine spätere automatische Updateprüfung benötigt für private Releases eine autorisierte GitHub-Verbindung. Das ist noch nicht eingerichtet.
+Nur bewusst freigegebene stabile Tags `vX.Y.Z` werden veröffentlicht. GitHub Actions prüft den Quellcode und baut das Asset `DAM-vX.Y.Z.zip`. Der Selbst-Updater akzeptiert nur den exakten Assetnamen, die offizielle SHA-256-Prüfsumme und erlaubte Programmdateien. **GitHubs automatisch generiertes Quellcode-ZIP ist nicht als Update geeignet.**
+
+Eine SHA-256-Prüfsumme beweist die Integrität des Pakets gegenüber den GitHub-Metadaten, aber keine unabhängige Autorenschaftssignatur. Ein signierter Veröffentlichungsprozess ist als spätere Verbesserung geplant.
+
+Technische Details: [Selbstupdate-Plan](docs/SELBSTUPDATE_PLAN.md).
+
+### Tests
+
+```bash
+python3 -m unittest discover -p 'test_*.py' -q
+```
