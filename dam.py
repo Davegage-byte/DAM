@@ -70,8 +70,8 @@ CATALOG = [
 
 
 # Standardbeschreibungen sind bewusst kurz und vollständig deutsch.
-# Eigene Texte können unabhängig vom Programm in ~/DAM/app_beschreibungen.json
-# hinterlegt werden. Die Datei wird bei Updates nicht überschrieben.
+# Eigene Texte bleiben unter ~/.config/dam/app_beschreibungen.json unabhängig
+# von den Programmversionen erhalten. Die alte Datei wird weiterhin gelesen.
 APP_DESCRIPTIONS = {
     'rustdesk': 'Fernzugriff und Fernwartung von Computern.',
     'vlc': 'Spielt Videos, Musik und viele Medienformate ab.',
@@ -108,16 +108,24 @@ APP_DESCRIPTIONS = {
 
 
 def custom_descriptions():
-    """Optionale, benutzereigene deutsche Beschreibungen laden."""
-    path = os.path.expanduser('~/DAM/app_beschreibungen.json')
-    try:
-        with open(path, 'r', encoding='utf-8') as stream:
-            data = json.load(stream)
-        if isinstance(data, dict):
-            return {str(k).casefold().strip(): str(v).strip()
-                    for k, v in data.items() if isinstance(v, str) and v.strip()}
-    except (OSError, ValueError, TypeError):
-        pass
+    """Nutzervorgaben aus dem dauerhaften Konfigurationspfad laden.
+
+    Frühere DAM-Installationen nutzten ~/DAM. Die alte Datei wird als
+    Lesefallback unterstützt; bei Updates wird nichts verschoben oder gelöscht.
+    """
+    paths = (
+        os.path.expanduser('~/.config/dam/app_beschreibungen.json'),
+        os.path.expanduser('~/DAM/app_beschreibungen.json'),
+    )
+    for path in paths:
+        try:
+            with open(path, 'r', encoding='utf-8') as stream:
+                data = json.load(stream)
+            if isinstance(data, dict):
+                return {str(k).casefold().strip(): str(v).strip()
+                        for k, v in data.items() if isinstance(v, str) and v.strip()}
+        except (OSError, ValueError, TypeError):
+            continue
     return {}
 
 
@@ -844,7 +852,7 @@ class DAM(Adw.Application):
                 'je nach Paketquelle unvollständig sein.')
         section('Technische Informationen',
                 'Fehlerprotokoll: ~/.local/state/dam/dam.log\n'
-                'Eigene App-Beschreibungen: ~/DAM/app_beschreibungen.json')
+                'Eigene App-Beschreibungen: ~/.config/dam/app_beschreibungen.json')
         update_heading = Gtk.Label(label='Letzte Updateprüfung')
         update_heading.add_css_class('heading')
         update_heading.set_xalign(0)
@@ -2162,12 +2170,20 @@ class DAM(Adw.Application):
                 name.set_xalign(0)
                 name.set_hexpand(True)
                 row.append(name)
-                protect = Gtk.Button(
-                    label='Schutz aufheben' if backup['pinned'] else 'Behalten')
-                if backup['active'] or backup['rollback']:
-                    protect.set_tooltip_text('Version bleibt unabhängig davon geschützt')
-                protect.connect('clicked', lambda _btn, v=version, mark=not backup['pinned']:
-                                on_protect(v, mark))
+                # Aktive und unmittelbare Rückfallversion bleiben immer
+                # geschützt. Eine evtl. gespeicherte Pin-Markierung bleibt
+                # unverändert und kann später erneut bearbeitet werden.
+                if backup['active']:
+                    protect = Gtk.Button(label='Aktiv 🔒')
+                    protect.set_sensitive(False)
+                elif backup['rollback']:
+                    protect = Gtk.Button(label='Rückfallversion 🔒')
+                    protect.set_sensitive(False)
+                else:
+                    protect = Gtk.Button(
+                        label='Schutz aufheben' if backup['pinned'] else 'Behalten')
+                    protect.connect('clicked', lambda _btn, v=version, mark=not backup['pinned']:
+                                    on_protect(v, mark))
                 row.append(protect)
 
                 restore = Gtk.Button(label='Wiederherstellen')
